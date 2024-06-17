@@ -1,0 +1,53 @@
+function processUnreadEmailsv2() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Amazon Dropship');
+  var folderid = "xxxxxxxxxxxxxxxxxxxxxxxxxxx";
+  var subject = "Remittance Advice - STUPELL INDUSTRIES";
+  var fromAddress = "test@gmail.com";
+
+  if (folderid) {
+    var threads = GmailApp.search('is:unread subject:"' + subject + '" from:' + fromAddress);
+
+    if (threads.length > 0) {
+      var thread = threads[0];
+      var messages = thread.getMessages();
+      var folder = DriveApp.getFolderById(folderid);
+
+      messages.forEach(function (message) {
+        var htmlBody = message.getBody();
+        var subject = message.getSubject();
+
+        var $ = Cheerio.load(htmlBody);
+        var rows = $('table tr');
+        
+        if (rows.length > 0) {
+          var spreadsheet = SpreadsheetApp.create(subject);
+          var sheet = spreadsheet.getActiveSheet();
+
+          rows.each(function (i, row) {
+            var rowData = [];
+            $(row).find('td, th').each(function (j, cell) {
+              rowData.push($(cell).text().trim());
+            });
+            sheet.appendRow(rowData);
+          });
+
+          var url = "https://docs.google.com/feeds/download/spreadsheets/Export?key=" + spreadsheet.getId() + "&exportFormat=xlsx";
+          var params = {
+            method: "get",
+            headers: {
+              Authorization: "Bearer " + ScriptApp.getOAuthToken()
+            },
+            muteHttpExceptions: true
+          };
+          var response = UrlFetchApp.fetch(url, params);
+          var xlsxBlob = response.getBlob();
+          folder.createFile(xlsxBlob.setName(spreadsheet.getName() + ".xlsx"));
+
+          DriveApp.getFileById(spreadsheet.getId()).setTrashed(true);
+
+          message.markRead();
+        }
+      });
+    }
+  }
+}
